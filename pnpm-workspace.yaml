@@ -1,0 +1,4 @@
+minimumReleaseAgeExclude:
+  - '@tabler/icons-react@3.46.0'
+  - '@tabler/icons@3.46.0'
+  - postcss@8.5.24
