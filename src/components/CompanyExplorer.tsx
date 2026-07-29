@@ -35,18 +35,31 @@ import {
   formatCount,
   formatDate,
 } from '../lib/format';
+import {
+  chooseDefaultCompany,
+  shouldLoadNextCompanyPage,
+} from '../lib/companySelection';
 import { ArticleGridSkeleton, ErrorState } from './StateViews';
 
 function queryValue(name: string): string | null {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-function updateSelectionUrl(categoryKey: string, companyKey?: string): void {
+function updateSelectionUrl(
+  categoryKey: string,
+  companyKey?: string,
+): void {
   const url = new URL(window.location.href);
   url.searchParams.set('category', categoryKey);
   if (companyKey) url.searchParams.set('company', companyKey);
   else url.searchParams.delete('company');
   window.history.pushState(null, '', url);
+}
+
+function mobileScrollBehavior(): ScrollBehavior {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth';
 }
 
 function handleTreeNavigation(
@@ -172,10 +185,32 @@ export function CompanyExplorer({
       ? [selected, ...matches]
       : matches;
   }, [allCompanies, search, selectedCompanyKey]);
-  const selectedCompany =
+  const requestedCompany =
     allCompanies.find(
       (company) => company.company_key === selectedCompanyKey,
     ) ?? null;
+  const selectedCompany =
+    requestedCompany ??
+    (selectedCompanyKey === null ? chooseDefaultCompany(allCompanies) : null);
+
+  useEffect(() => {
+    if (
+      !shouldLoadNextCompanyPage({
+        requestedCompanyKey: selectedCompanyKey,
+        companyFound: Boolean(requestedCompany),
+        hasNextPage: Boolean(categoryPagesQuery.hasNextPage),
+        isFetchingNextPage: categoryPagesQuery.isFetchingNextPage,
+      })
+    ) {
+      return;
+    }
+
+    void categoryPagesQuery.fetchNextPage();
+  }, [
+    categoryPagesQuery,
+    requestedCompany,
+    selectedCompanyKey,
+  ]);
 
   const selectCategory = (category: CategoryDescriptor) => {
     setSelectedCategoryKey(category.key);
@@ -185,7 +220,7 @@ export function CompanyExplorer({
     if (isMobile) {
       requestAnimationFrame(() => {
         companyPaneRef.current?.scrollIntoView({
-          behavior: 'smooth',
+          behavior: mobileScrollBehavior(),
           block: 'start',
         });
         companyPaneRef.current?.focus({ preventScroll: true });
@@ -200,7 +235,7 @@ export function CompanyExplorer({
     if (isMobile) {
       requestAnimationFrame(() => {
         articlePaneRef.current?.scrollIntoView({
-          behavior: 'smooth',
+          behavior: mobileScrollBehavior(),
           block: 'start',
         });
         articlePaneRef.current?.focus({ preventScroll: true });
@@ -265,53 +300,49 @@ export function CompanyExplorer({
           </div>
 
           <ScrollArea className="tree-pane__scroll" type="auto" scrollbarSize={6}>
-            <nav
-              className="category-tree"
-              aria-label="News taxonomy"
-              role="tree"
-            >
-              {categories.map((category) => {
-                const active = category.key === selectedCategory?.key;
-                return (
-                  <button
-                    type="button"
-                    key={category.key}
-                    className="category-node"
-                    role="treeitem"
-                    aria-level={1}
-                    aria-selected={active}
-                    aria-expanded={active}
-                    tabIndex={active ? 0 : -1}
-                    data-active={active || undefined}
-                    aria-current={active ? 'true' : undefined}
-                    onKeyDown={handleTreeNavigation}
-                    onClick={() => selectCategory(category)}
-                  >
-                    <span className="category-node__folder" aria-hidden="true">
-                      {active ? (
-                        <IconFolderOpen size={18} stroke={1.8} />
-                      ) : (
-                        <IconFolder size={18} stroke={1.8} />
-                      )}
-                    </span>
-                    <span className="category-node__copy">
-                      <span className="category-node__name">
-                        {category.name}
+            <nav aria-label="News taxonomy">
+              <div className="category-tree" role="tree">
+                {categories.map((category) => {
+                  const active = category.key === selectedCategory?.key;
+                  return (
+                    <button
+                      type="button"
+                      key={category.key}
+                      className="category-node"
+                      role="treeitem"
+                      aria-level={1}
+                      aria-selected={active}
+                      tabIndex={active ? 0 : -1}
+                      data-active={active || undefined}
+                      onKeyDown={handleTreeNavigation}
+                      onClick={() => selectCategory(category)}
+                    >
+                      <span className="category-node__folder" aria-hidden="true">
+                        {active ? (
+                          <IconFolderOpen size={18} stroke={1.8} />
+                        ) : (
+                          <IconFolder size={18} stroke={1.8} />
+                        )}
                       </span>
-                      <span className="category-node__meta">
-                        {formatCompactCount(category.company_count)} companies ·{' '}
-                        {formatCompactCount(category.record_count)} articles
+                      <span className="category-node__copy">
+                        <span className="category-node__name">
+                          {category.name}
+                        </span>
+                        <span className="category-node__meta">
+                          {formatCompactCount(category.company_count)} companies ·{' '}
+                          {formatCompactCount(category.record_count)} articles
+                        </span>
                       </span>
-                    </span>
-                    <IconChevronRight
-                      className="category-node__chevron"
-                      size={15}
-                      stroke={1.8}
-                      aria-hidden="true"
-                    />
-                  </button>
-                );
-              })}
+                      <IconChevronRight
+                        className="category-node__chevron"
+                        size={15}
+                        stroke={1.8}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
             </nav>
           </ScrollArea>
         </aside>
@@ -408,7 +439,7 @@ export function CompanyExplorer({
                       key={company.company_key}
                       className="company-node"
                       role="treeitem"
-                      aria-level={2}
+                      aria-level={1}
                       aria-selected={active}
                       tabIndex={
                         active || (!selectedCompany && companyIndex === 0)
@@ -416,7 +447,6 @@ export function CompanyExplorer({
                           : -1
                       }
                       data-active={active || undefined}
-                      aria-current={active ? 'true' : undefined}
                       onKeyDown={handleTreeNavigation}
                       onClick={() => selectCompany(company)}
                     >
@@ -441,20 +471,20 @@ export function CompanyExplorer({
                     </button>
                   );
                 })}
-                {categoryPagesQuery.hasNextPage ? (
-                  <Button
-                    variant="subtle"
-                    color="harbor"
-                    size="xs"
-                    leftSection={<IconArrowDown size={14} />}
-                    loading={categoryPagesQuery.isFetchingNextPage}
-                    onClick={() => void categoryPagesQuery.fetchNextPage()}
-                    className="company-tree__more"
-                  >
-                    Load 100 more companies
-                  </Button>
-                ) : null}
               </div>
+              {categoryPagesQuery.hasNextPage ? (
+                <Button
+                  variant="subtle"
+                  color="harbor"
+                  size="xs"
+                  leftSection={<IconArrowDown size={14} />}
+                  loading={categoryPagesQuery.isFetchingNextPage}
+                  onClick={() => void categoryPagesQuery.fetchNextPage()}
+                  className="company-tree__more"
+                >
+                  Load 100 more companies
+                </Button>
+              ) : null}
             </ScrollArea>
           )}
         </section>

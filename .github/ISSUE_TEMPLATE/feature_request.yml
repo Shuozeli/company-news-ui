@@ -1,0 +1,30 @@
+name: Reader improvement
+description: Suggest an improvement to navigation, presentation, accessibility, or performance
+title: "[Idea]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the reader workflow or user need, not only the proposed control.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What should a visitor be able to do after this change?
+    validations:
+      required: true
+  - type: textarea
+    id: loading
+    attributes:
+      label: Data-loading impact
+      description: Explain any new static files the reader would request and when.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, comparable interfaces, and accessibility considerations are welcome.

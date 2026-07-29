@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Source discovery or crawl problem
+    url: https://github.com/Shuozeli/company-feed-server/issues
+    about: Report a missing, stale, or incorrectly crawled company source.
+  - name: Published data correction
+    url: https://github.com/Shuozeli/company-news-data/issues
+    about: Report a company, article, schema, or generated snapshot problem.
+  - name: Sensitive security report
+    url: https://github.com/Shuozeli/company-news-ui/security/advisories/new
+    about: Privately report a vulnerability in the reader.

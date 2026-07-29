@@ -89,7 +89,7 @@ export default function App() {
             </span>
             <span>
               <span className="brand__name">Company News</span>
-              <span className="brand__byline">an open data reader</span>
+              <span className="brand__byline">a company-first reader</span>
             </span>
           </a>
 
@@ -106,7 +106,7 @@ export default function App() {
             ) : null}
             <Button
               component="a"
-              href="https://github.com/Shuozeli/company-news-data"
+              href="https://github.com/Shuozeli/company-news-ui"
               target="_blank"
               rel="noreferrer"
               variant="subtle"
@@ -114,8 +114,8 @@ export default function App() {
               size="sm"
               leftSection={<IconBrandGithub size={18} />}
             >
-              <span className="desktop-label">View data</span>
-              <span className="mobile-label">Data</span>
+              <span className="desktop-label">View source</span>
+              <span className="mobile-label">Source</span>
             </Button>
           </Group>
         </Container>
@@ -127,59 +127,113 @@ export default function App() {
             <div className="hero__grid">
               <div className="hero__copy">
                 <Badge variant="outline" color="ember" radius="xl">
-                  A navigable open archive
+                  Company news sources, one branch at a time
                 </Badge>
                 <Title order={1}>
-                  Follow the branch,
-                  <br /> find the story.
+                  An open-source, company-first news aggregation stack.
                 </Title>
                 <Text className="hero__description">
-                  Browse predefined categories, open a company, then read its
-                  news. Every level is a small static index, so the reader
-                  fetches only the branch you explore.
+                  The pipeline discovers and reviews company newsrooms, blogs,
+                  press pages, and engineering sources, then publishes a
+                  versioned static archive. This reader requests only the
+                  category, company, and article branch you explore.
                 </Text>
+                <Group className="hero__actions" gap="sm">
+                  <Button
+                    component="a"
+                    href="#archive"
+                    color="harbor"
+                    radius="xl"
+                    leftSection={<IconSitemap size={17} />}
+                  >
+                    Try the archive
+                  </Button>
+                  <Button
+                    component="a"
+                    href="https://github.com/Shuozeli/company-news-ui"
+                    target="_blank"
+                    rel="noreferrer"
+                    variant="outline"
+                    color="dark"
+                    radius="xl"
+                    leftSection={<IconBrandGithub size={17} />}
+                  >
+                    View source
+                  </Button>
+                  <Button
+                    component="a"
+                    href="https://github.com/Shuozeli/company-news-data"
+                    target="_blank"
+                    rel="noreferrer"
+                    variant="subtle"
+                    color="dark"
+                    radius="xl"
+                  >
+                    View data
+                  </Button>
+                </Group>
               </div>
 
-              <div className="snapshot-card">
-                <Text className="eyebrow">Current data snapshot</Text>
-                {indexQuery.isPending ? (
-                  <Stack gap="md" mt="md">
-                    <Skeleton height={46} />
-                    <Skeleton height={46} />
-                    <Skeleton height={13} width="75%" />
-                  </Stack>
-                ) : indexQuery.data ? (
-                  <>
-                    <div className="snapshot-card__stats">
-                      <SnapshotStat
-                        icon={<IconNews size={20} />}
-                        value={formatCount(indexQuery.data.record_count)}
-                        label="articles"
-                      />
-                      <SnapshotStat
-                        icon={<IconBuilding size={20} />}
-                        value={formatCount(indexQuery.data.company_count)}
-                        label="companies"
-                      />
-                    </div>
-                    <Group gap={7} mt="lg" c="dimmed">
-                      <IconDatabase size={15} stroke={1.7} />
-                      <Text size="xs">
-                        Generated {formatDateTime(indexQuery.data.generated_at)}
-                      </Text>
-                    </Group>
-                  </>
-                ) : (
-                  <Text c="dimmed" size="sm" mt="md">
-                    Snapshot metadata is temporarily unavailable.
-                  </Text>
-                )}
+              <div className="hero__side">
+                <div className="snapshot-card">
+                  <Text className="eyebrow">Current data snapshot</Text>
+                  {indexQuery.isPending ? (
+                    <Stack gap="md" mt="md">
+                      <Skeleton height={46} />
+                      <Skeleton height={46} />
+                      <Skeleton height={13} width="75%" />
+                    </Stack>
+                  ) : indexQuery.data ? (
+                    <>
+                      <div className="snapshot-card__stats">
+                        <SnapshotStat
+                          icon={<IconNews size={20} />}
+                          value={formatCount(indexQuery.data.record_count)}
+                          label="articles"
+                        />
+                        <SnapshotStat
+                          icon={<IconBuilding size={20} />}
+                          value={formatCount(indexQuery.data.company_count)}
+                          label="companies"
+                        />
+                      </div>
+                      <Group gap={7} mt="md" className="snapshot-card__generated">
+                        <IconDatabase size={15} stroke={1.7} />
+                        <Text size="xs">
+                          Generated {formatDateTime(indexQuery.data.generated_at)}
+                        </Text>
+                      </Group>
+                    </>
+                  ) : (
+                    <Text className="snapshot-card__generated" size="sm" mt="md">
+                      Snapshot metadata is temporarily unavailable.
+                    </Text>
+                  )}
+                </div>
+
+                <div className="pipeline-strip" aria-label="System architecture">
+                  <PipelineStage
+                    icon={<IconSitemap size={17} />}
+                    title="Pipeline"
+                    detail="Discover + crawl"
+                  />
+                  <PipelineStage
+                    icon={<IconDatabase size={17} />}
+                    title="Versioned data"
+                    detail="JSON + Markdown"
+                  />
+                  <PipelineStage
+                    icon={<IconNews size={17} />}
+                    title="Static reader"
+                    detail="Load one branch"
+                  />
+                </div>
               </div>
             </div>
           </Container>
         </section>
 
-        <Container size="xl" className="content-shell">
+        <Container size="xl" className="content-shell" id="archive">
           {indexQuery.isError ? (
             <ErrorState
               title="The data index is unavailable"
@@ -239,11 +293,19 @@ export default function App() {
         <Container size="xl" className="site-footer__inner">
           <div>
             <Text fw={700}>Company News</Text>
-            <Text size="sm" c="dimmed">
-              A browser for open, version-controlled company news data.
+            <Text size="sm" className="footer-note">
+              Source code is MIT licensed. Archived articles remain subject to
+              their publishers’ rights.
             </Text>
           </div>
           <Group gap="lg">
+            <a
+              href="https://github.com/Shuozeli/company-news-ui"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Reader <IconArrowUpRight size={14} />
+            </a>
             <a
               href="https://github.com/Shuozeli/company-news-data"
               target="_blank"
@@ -271,6 +333,32 @@ export default function App() {
           />
         </Suspense>
       ) : null}
+    </div>
+  );
+}
+
+function PipelineStage({
+  icon,
+  title,
+  detail,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <div className="pipeline-stage">
+      <span className="pipeline-stage__icon" aria-hidden="true">
+        {icon}
+      </span>
+      <span>
+        <Text component="span" className="pipeline-stage__title">
+          {title}
+        </Text>
+        <Text component="span" className="pipeline-stage__detail">
+          {detail}
+        </Text>
+      </span>
     </div>
   );
 }

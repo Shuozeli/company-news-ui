@@ -1,0 +1,47 @@
+name: Reader bug
+description: Report a reproducible problem in the static web reader
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for UI behavior. Data and crawl corrections belong in the linked repositories in the issue chooser.
+  - type: input
+    id: url
+    attributes:
+      label: Reader URL
+      description: Include category and company query parameters when relevant.
+      placeholder: https://shuozeli.github.io/company-news-ui/?category=...
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the expected result and the result you observed.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Open …
+        2. Select …
+        3. Observe …
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device
+      placeholder: Firefox 128 on macOS 15, or Safari on iPhone 15
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, console errors, and accessibility details are helpful. Do not include secrets or copyrighted article bodies.

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://shuozeli.github.io/company-news-ui/sitemap.xml
