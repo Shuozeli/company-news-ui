@@ -6,7 +6,8 @@
   "packageManager": "pnpm@11.3.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/prepare-sites.mjs",
+    "build": "pnpm build:vite && node scripts/prepare-sites.mjs",
+    "build:vite": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

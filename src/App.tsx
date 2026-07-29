@@ -72,7 +72,11 @@ export default function App() {
     <div className="app">
       <header className="site-header">
         <Container size="xl" className="site-header__inner">
-          <a href="/" className="brand" aria-label="Company News home">
+          <a
+            href={import.meta.env.BASE_URL}
+            className="brand"
+            aria-label="Company News home"
+          >
             <span className="brand__mark" aria-hidden="true">
               <IconNews size={23} stroke={1.7} />
             </span>

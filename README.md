@@ -3,6 +3,8 @@
 A static Vite, React, and Mantine reader for
 [`company-news-data`](https://github.com/Shuozeli/company-news-data).
 
+[Open the public reader](https://shuozeli.github.io/company-news-ui/).
+
 The UI is intentionally separate from the multi-gigabyte data repository. It
 starts with one small `index.json` request and follows paths declared by that
 snapshot:
@@ -33,11 +35,12 @@ pnpm lint
 pnpm build
 ```
 
-The production build remains a normal Vite SPA. Its final packaging step adds a
-small standards-based `fetch()` worker at `dist/server/index.js` and copies the
-Sites project metadata into `dist/.openai/`. The worker delegates static files
-to the hosting provider's `ASSETS` binding and provides an HTML fallback for
-client-side routes.
+The production build remains a normal Vite SPA with relative asset paths, so it
+can be served from GitHub Pages or any static subdirectory. Its final Sites
+packaging step adds a small standards-based `fetch()` worker at
+`dist/server/index.js` and copies project metadata into `dist/.openai/`. The
+worker delegates static files to the hosting provider's `ASSETS` binding and
+provides an HTML fallback for client-side routes.
 
 The default data source is the raw `main` branch of `company-news-data`. To use
 another compatible location:
