@@ -15,9 +15,10 @@ import {
   IconBuilding,
   IconDatabase,
   IconNews,
+  IconSitemap,
 } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 
 import { LatestFeed } from './components/LatestFeed';
 import { ErrorState } from './components/StateViews';
@@ -29,7 +30,7 @@ import {
   shortenGeneration,
 } from './lib/format';
 
-type AppView = 'latest' | 'companies';
+type AppView = 'categories' | 'latest';
 
 const CompanyExplorer = lazy(() =>
   import('./components/CompanyExplorer').then((module) => ({
@@ -44,7 +45,7 @@ const ArticleDrawer = lazy(() =>
 
 function initialView(): AppView {
   const view = new URLSearchParams(window.location.search).get('view');
-  return view === 'companies' ? 'companies' : 'latest';
+  return view === 'latest' ? 'latest' : 'categories';
 }
 
 export default function App() {
@@ -59,13 +60,19 @@ export default function App() {
     retry: 2,
   });
 
+  useEffect(() => {
+    const syncViewFromUrl = () => setView(initialView());
+    window.addEventListener('popstate', syncViewFromUrl);
+    return () => window.removeEventListener('popstate', syncViewFromUrl);
+  }, []);
+
   const changeView = (nextView: string | null) => {
-    if (nextView !== 'latest' && nextView !== 'companies') return;
+    if (nextView !== 'latest' && nextView !== 'categories') return;
     setView(nextView);
     const url = new URL(window.location.href);
-    if (nextView === 'latest') url.searchParams.delete('view');
+    if (nextView === 'categories') url.searchParams.delete('view');
     else url.searchParams.set('view', nextView);
-    window.history.replaceState(null, '', url);
+    window.history.pushState(null, '', url);
   };
 
   return (
@@ -120,17 +127,16 @@ export default function App() {
             <div className="hero__grid">
               <div className="hero__copy">
                 <Badge variant="outline" color="ember" radius="xl">
-                  Versioned · static · open
+                  A navigable open archive
                 </Badge>
                 <Title order={1}>
-                  Company updates,
-                  <br />
-                  minus the firehose.
+                  Follow the branch,
+                  <br /> find the story.
                 </Title>
                 <Text className="hero__description">
-                  Explore engineering posts, product news, and company
-                  announcements from a version-controlled archive. The reader
-                  requests only the slice you choose.
+                  Browse predefined categories, open a company, then read its
+                  news. Every level is a small static index, so the reader
+                  fetches only the branch you explore.
                 </Text>
               </div>
 
@@ -189,14 +195,14 @@ export default function App() {
             <Tabs value={view} onChange={changeView} keepMounted={false}>
               <div className="view-nav">
                 <Tabs.List>
+                  <Tabs.Tab
+                    value="categories"
+                    leftSection={<IconSitemap size={17} />}
+                  >
+                    Explore tree
+                  </Tabs.Tab>
                   <Tabs.Tab value="latest" leftSection={<IconNews size={17} />}>
                     Latest
-                  </Tabs.Tab>
-                  <Tabs.Tab
-                    value="companies"
-                    leftSection={<IconBuilding size={17} />}
-                  >
-                    Companies
                   </Tabs.Tab>
                 </Tabs.List>
                 <Text size="xs" c="dimmed" visibleFrom="sm">
@@ -204,13 +210,7 @@ export default function App() {
                 </Text>
               </div>
 
-              <Tabs.Panel value="latest" pt="xl">
-                <LatestFeed
-                  index={indexQuery.data}
-                  onOpenArticle={setSelectedArticle}
-                />
-              </Tabs.Panel>
-              <Tabs.Panel value="companies" pt="xl">
+              <Tabs.Panel value="categories" pt="xl">
                 <Suspense
                   fallback={
                     <div className="app-loading">
@@ -223,6 +223,12 @@ export default function App() {
                     onOpenArticle={setSelectedArticle}
                   />
                 </Suspense>
+              </Tabs.Panel>
+              <Tabs.Panel value="latest" pt="xl">
+                <LatestFeed
+                  index={indexQuery.data}
+                  onOpenArticle={setSelectedArticle}
+                />
               </Tabs.Panel>
             </Tabs>
           )}

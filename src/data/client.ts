@@ -2,6 +2,8 @@ import type {
   ArticleDocument,
   ArticleRecord,
   BrowsePage,
+  CategoryDirectoryPage,
+  CategoryDirectoryManifest,
   CompanyDirectoryBucket,
   CompanyDirectoryManifest,
   CompanyManifest,
@@ -73,7 +75,12 @@ export class CompanyNewsDataClient {
     this.baseUrl = normalizeBaseUrl(baseUrl);
   }
 
-  private urlFor(path: string, generation?: string): URL {
+  private urlFor(
+    path: string,
+    cacheKey?: string,
+    cacheKeyName = 'generation',
+    additionalCacheKeys?: Readonly<Record<string, string>>,
+  ): URL {
     assertRelativeDataPath(path);
     const url = new URL(path, this.baseUrl);
     if (
@@ -82,8 +89,11 @@ export class CompanyNewsDataClient {
     ) {
       throw new DataRequestError('Data path escaped its configured repository', path);
     }
-    if (generation) {
-      url.searchParams.set('generation', generation);
+    if (cacheKey) {
+      url.searchParams.set(cacheKeyName, cacheKey);
+    }
+    for (const [name, value] of Object.entries(additionalCacheKeys ?? {})) {
+      url.searchParams.set(name, value);
     }
     return url;
   }
@@ -91,13 +101,18 @@ export class CompanyNewsDataClient {
   private async getJson<T>(
     path: string,
     signal?: AbortSignal,
-    generation?: string,
+    cacheKey?: string,
+    cacheKeyName?: string,
+    additionalCacheKeys?: Readonly<Record<string, string>>,
   ): Promise<T> {
-    const response = await fetch(this.urlFor(path, generation), {
-      signal,
-      cache: generation ? 'force-cache' : 'no-store',
-      headers: { Accept: 'application/json' },
-    });
+    const response = await fetch(
+      this.urlFor(path, cacheKey, cacheKeyName, additionalCacheKeys),
+      {
+        signal,
+        cache: cacheKey ? 'force-cache' : 'no-store',
+        headers: { Accept: 'application/json' },
+      },
+    );
     if (!response.ok) {
       throw new DataRequestError(
         `Data request failed with HTTP ${response.status}`,
@@ -186,6 +201,52 @@ export class CompanyNewsDataClient {
     );
     assertGeneration(bucket.generation, generation, path);
     return bucket;
+  }
+
+  async getCategoryDirectory(
+    path: string,
+    generation: string,
+    taxonomyGeneration: string,
+    signal?: AbortSignal,
+  ): Promise<CategoryDirectoryManifest> {
+    const manifest = await this.getJson<CategoryDirectoryManifest>(
+      path,
+      signal,
+      generation,
+      'generation',
+      { taxonomy_generation: taxonomyGeneration },
+    );
+    assertGeneration(manifest.generation, generation, path);
+    if (manifest.taxonomy_generation !== taxonomyGeneration) {
+      throw new DataRequestError(
+        'The company taxonomy changed while its directory was loading. Refresh to use the newest tree.',
+        path,
+      );
+    }
+    return manifest;
+  }
+
+  async getCategoryPage(
+    path: string,
+    generation: string,
+    taxonomyGeneration: string,
+    signal?: AbortSignal,
+  ): Promise<CategoryDirectoryPage> {
+    const page = await this.getJson<CategoryDirectoryPage>(
+      path,
+      signal,
+      generation,
+      'generation',
+      { taxonomy_generation: taxonomyGeneration },
+    );
+    assertGeneration(page.generation, generation, path);
+    if (page.taxonomy_generation !== taxonomyGeneration) {
+      throw new DataRequestError(
+        'The company taxonomy changed while this category was loading. Refresh to use the newest tree.',
+        path,
+      );
+    }
+    return page;
   }
 
   async getCompanyManifest(

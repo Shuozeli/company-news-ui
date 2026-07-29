@@ -13,17 +13,19 @@ snapshot:
 index.json
 ├── recent/manifest.json
 │   └── pages/000001.json       # 50 summaries per request
-└── companies/manifest.json
-    └── buckets/m.json          # one name bucket per request
-        └── company.json
+└── categories/manifest.json
+    └── <category-key>/pages/000001.json # 100 companies per request
+        └── Microsoft → company.json
             └── pages/000001.json
                 ├── record.json # fetched only after article click
                 └── article.md  # fetched only after article click
 ```
 
 Normal browser navigation never downloads the full-text JSONL search shards.
-Every mutable static request carries the current dataset generation as a cache
-key, and generation-bearing responses are checked to detect mixed snapshots.
+Article pages carry the dataset generation as a cache key. Category buckets
+carry both the dataset and taxonomy generations, so article counts and category
+corrections invalidate independently without changing article identity. Both
+generations are checked to detect mixed snapshots.
 
 ## Development
 
@@ -56,11 +58,12 @@ serve the OpenAPI/JSON Schema compatible static tree.
 
 | User action | Static files requested |
 | --- | --- |
-| Open reader | `index.json`, recent manifest, first 50-summary page |
-| Load more | One additional 50-summary page |
-| Open Companies | Company directory manifest |
-| Select/search a letter | One alphabetical bucket |
+| Open reader | `index.json`, category directory, first 100-company page |
+| Select a category | Its first 100-company page |
+| Load more companies | One additional 100-company page |
 | Select a company | One company manifest and its first summary page |
+| Load more | One additional 50-summary page |
+| Open Latest | Recent manifest and its first 50-summary page |
 | Open an article | Its `record.json` and `article.md` |
 
 ## License

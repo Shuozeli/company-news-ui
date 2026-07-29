@@ -4,7 +4,6 @@ import {
   Group,
   Loader,
   ScrollArea,
-  SimpleGrid,
   Stack,
   Text,
   TextInput,
@@ -13,14 +12,21 @@ import {
 import {
   IconArrowDown,
   IconBuilding,
+  IconChevronRight,
+  IconFileText,
+  IconFolder,
+  IconFolderOpen,
   IconSearch,
+  IconSitemap,
 } from '@tabler/icons-react';
+import { useMediaQuery } from '@mantine/hooks';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { dataClient } from '../data/client';
 import type {
   ArticleSummary,
+  CategoryDescriptor,
   CompanyDirectoryEntry,
   DataIndex,
 } from '../data/types';
@@ -29,27 +35,43 @@ import {
   formatCount,
   formatDate,
 } from '../lib/format';
-import { ArticleCard } from './ArticleCard';
 import { ArticleGridSkeleton, ErrorState } from './StateViews';
 
-const DIRECTORY_BUCKETS = [
-  ...'abcdefghijklmnopqrstuvwxyz',
-  '0-9',
-  'other',
-];
-
-function bucketLabel(bucket: string): string {
-  if (bucket === '0-9') return '0–9';
-  if (bucket === 'other') return '#';
-  return bucket.toUpperCase();
+function queryValue(name: string): string | null {
+  return new URLSearchParams(window.location.search).get(name);
 }
 
-function bucketForSearch(value: string): string | undefined {
-  const character = value.trimStart()[0];
-  if (!character) return undefined;
-  if (/[a-z]/i.test(character)) return character.toLowerCase();
-  if (/\d/.test(character)) return '0-9';
-  return 'other';
+function updateSelectionUrl(categoryKey: string, companyKey?: string): void {
+  const url = new URL(window.location.href);
+  url.searchParams.set('category', categoryKey);
+  if (companyKey) url.searchParams.set('company', companyKey);
+  else url.searchParams.delete('company');
+  window.history.pushState(null, '', url);
+}
+
+function handleTreeNavigation(
+  event: React.KeyboardEvent<HTMLButtonElement>,
+): void {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  const tree = event.currentTarget.closest('[role="tree"]');
+  const items = tree
+    ? Array.from(
+        tree.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
+      )
+    : [];
+  const currentIndex = items.indexOf(event.currentTarget);
+  if (currentIndex < 0 || items.length === 0) return;
+
+  event.preventDefault();
+  const nextIndex =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? items.length - 1
+        : event.key === 'ArrowDown'
+          ? Math.min(items.length - 1, currentIndex + 1)
+          : Math.max(0, currentIndex - 1);
+  items[nextIndex]?.focus();
 }
 
 interface CompanyExplorerProps {
@@ -61,72 +83,148 @@ export function CompanyExplorer({
   index,
   onOpenArticle,
 }: CompanyExplorerProps) {
-  const [selectedBucket, setSelectedBucket] = useState('a');
+  const categoryManifestPath = index.paths.category_directory_manifest;
+  const taxonomyGeneration = index.taxonomy_generation;
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState(
+    () => queryValue('category') ?? '',
+  );
+  const [selectedCompanyKey, setSelectedCompanyKey] = useState<string | null>(
+    () => queryValue('company'),
+  );
   const [search, setSearch] = useState('');
-  const [selectedCompany, setSelectedCompany] =
-    useState<CompanyDirectoryEntry | null>(null);
+  const companyPaneRef = useRef<HTMLElement>(null);
+  const articlePaneRef = useRef<HTMLElement>(null);
+  const isMobile = useMediaQuery('(max-width: 48em)');
 
   const directoryQuery = useQuery({
-    queryKey: ['company-directory', index.generation],
-    queryFn: ({ signal }) =>
-      dataClient.getCompanyDirectory(
-        index.paths.company_directory_manifest,
-        index.generation,
-        signal,
-      ),
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-
-  const descriptors = directoryQuery.data?.buckets ?? [];
-  const availableBuckets = new Map(
-    descriptors.map((descriptor) => [descriptor.bucket, descriptor]),
-  );
-  const effectiveBucket = availableBuckets.has(selectedBucket)
-    ? selectedBucket
-    : descriptors[0]?.bucket;
-  const descriptor = effectiveBucket
-    ? availableBuckets.get(effectiveBucket)
-    : undefined;
-
-  const bucketQuery = useQuery({
-    queryKey: ['company-bucket', index.generation, effectiveBucket],
+    queryKey: [
+      'category-directory',
+      index.generation,
+      taxonomyGeneration,
+    ],
     queryFn: ({ signal }) => {
-      if (!descriptor) throw new Error('Company bucket is unavailable');
-      return dataClient.getCompanyBucket(
-        descriptor.path,
+      if (!categoryManifestPath || !taxonomyGeneration) {
+        throw new Error('Category directory path is unavailable');
+      }
+      return dataClient.getCategoryDirectory(
+        categoryManifestPath,
         index.generation,
+        taxonomyGeneration,
         signal,
       );
     },
-    enabled: Boolean(descriptor),
+    enabled: Boolean(categoryManifestPath && taxonomyGeneration),
+    staleTime: 60_000,
+  });
+
+  const categories = directoryQuery.data?.categories ?? [];
+  const selectedCategory =
+    categories.find((category) => category.key === selectedCategoryKey) ??
+    categories.find((category) => category.name === 'Technology') ??
+    categories[0];
+
+  const categoryPageDescriptors = selectedCategory?.pages ?? [];
+  const categoryPagesQuery = useInfiniteQuery({
+    queryKey: [
+      'category-pages',
+      index.generation,
+      taxonomyGeneration,
+      selectedCategory?.key,
+    ],
+    queryFn: ({ pageParam, signal }) => {
+      const descriptor = categoryPageDescriptors[pageParam];
+      if (!descriptor || !taxonomyGeneration) {
+        throw new Error('Category page is unavailable');
+      }
+      return dataClient.getCategoryPage(
+        descriptor.path,
+        index.generation,
+        taxonomyGeneration,
+        signal,
+      );
+    },
+    initialPageParam: 0,
+    getNextPageParam: (_lastPage, loadedPages) =>
+      loadedPages.length < categoryPageDescriptors.length
+        ? loadedPages.length
+        : undefined,
+    enabled: categoryPageDescriptors.length > 0,
     staleTime: Number.POSITIVE_INFINITY,
   });
 
+  const allCompanies = useMemo(
+    () =>
+      categoryPagesQuery.data?.pages.flatMap((page) => page.companies) ?? [],
+    [categoryPagesQuery.data],
+  );
   const companies = useMemo(() => {
-    const entries = bucketQuery.data?.companies ?? [];
     const needle = search.trim().toLocaleLowerCase();
-    if (!needle) return entries;
-    return entries.filter(
-      (entry) =>
-        entry.company_name.toLocaleLowerCase().includes(needle) ||
-        entry.company_key.includes(needle),
+    if (!needle) return allCompanies;
+    const matches = allCompanies.filter(
+      (company) =>
+        company.company_name.toLocaleLowerCase().includes(needle) ||
+        company.company_key.toLocaleLowerCase().includes(needle),
     );
-  }, [bucketQuery.data, search]);
+    const selected = allCompanies.find(
+      (company) => company.company_key === selectedCompanyKey,
+    );
+    return selected && !matches.includes(selected)
+      ? [selected, ...matches]
+      : matches;
+  }, [allCompanies, search, selectedCompanyKey]);
+  const selectedCompany =
+    allCompanies.find(
+      (company) => company.company_key === selectedCompanyKey,
+    ) ?? null;
 
-  const changeBucket = (bucket: string) => {
-    setSelectedBucket(bucket);
+  const selectCategory = (category: CategoryDescriptor) => {
+    setSelectedCategoryKey(category.key);
+    setSelectedCompanyKey(null);
     setSearch('');
-    setSelectedCompany(null);
-  };
-
-  const changeSearch = (value: string) => {
-    setSearch(value);
-    const nextBucket = bucketForSearch(value);
-    if (nextBucket && availableBuckets.has(nextBucket)) {
-      setSelectedBucket(nextBucket);
-      if (nextBucket !== effectiveBucket) setSelectedCompany(null);
+    updateSelectionUrl(category.key);
+    if (isMobile) {
+      requestAnimationFrame(() => {
+        companyPaneRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        companyPaneRef.current?.focus({ preventScroll: true });
+      });
     }
   };
+
+  const selectCompany = (company: CompanyDirectoryEntry) => {
+    if (!selectedCategory) return;
+    setSelectedCompanyKey(company.company_key);
+    updateSelectionUrl(selectedCategory.key, company.company_key);
+    if (isMobile) {
+      requestAnimationFrame(() => {
+        articlePaneRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        });
+        articlePaneRef.current?.focus({ preventScroll: true });
+      });
+    }
+  };
+
+  useEffect(() => {
+    const syncSelectionFromUrl = () => {
+      setSelectedCategoryKey(queryValue('category') ?? '');
+      setSelectedCompanyKey(queryValue('company'));
+    };
+    window.addEventListener('popstate', syncSelectionFromUrl);
+    return () => window.removeEventListener('popstate', syncSelectionFromUrl);
+  }, []);
+
+  if (!categoryManifestPath || !taxonomyGeneration) {
+    return (
+      <ErrorState
+        title="This snapshot does not include the category tree"
+        message="Publish company-news-data with the taxonomy-aware exporter, then refresh this reader."
+      />
+    );
+  }
 
   if (directoryQuery.isPending) {
     return <ArticleGridSkeleton count={4} />;
@@ -137,140 +235,264 @@ export function CompanyExplorer({
   }
 
   return (
-    <Stack gap="xl">
+    <Stack gap="lg">
       <Group justify="space-between" align="end" className="section-heading">
         <div>
-          <Text className="eyebrow">Browse without the bulk download</Text>
-          <Title order={2}>Company directory</Title>
+          <Text className="eyebrow">Category → company → article</Text>
+          <Title order={2}>Browse the company-news tree</Title>
         </div>
         <Text c="dimmed" size="sm">
-          {formatCount(directoryQuery.data.company_count)} indexed companies
+          {formatCount(directoryQuery.data.category_count)} categories ·{' '}
+          {formatCount(directoryQuery.data.company_count)} companies
         </Text>
       </Group>
 
-      <div className="directory-toolbar">
-        <TextInput
-          value={search}
-          onChange={(event) => changeSearch(event.currentTarget.value)}
-          placeholder="Start typing a company name"
-          aria-label="Search companies"
-          leftSection={<IconSearch size={18} stroke={1.7} />}
-          size="md"
-          className="directory-search"
-        />
-        <Text size="xs" c="dimmed" className="directory-hint">
-          Search loads one letter bucket only.
-        </Text>
-      </div>
-
-      <ScrollArea type="auto" offsetScrollbars scrollbarSize={6}>
-        <div className="alphabet" aria-label="Company name ranges">
-          {DIRECTORY_BUCKETS.map((bucket) => {
-            const bucketDescriptor = availableBuckets.get(bucket);
-            return (
-              <button
-                type="button"
-                key={bucket}
-                className="alphabet__button"
-                data-active={bucket === effectiveBucket || undefined}
-                disabled={!bucketDescriptor}
-                onClick={() => changeBucket(bucket)}
-                aria-label={
-                  bucketDescriptor
-                    ? `${bucketLabel(bucket)}, ${bucketDescriptor.company_count} companies`
-                    : `${bucketLabel(bucket)}, no companies`
-                }
-              >
-                {bucketLabel(bucket)}
-              </button>
-            );
-          })}
-        </div>
-      </ScrollArea>
-
-      <div className="company-browser">
-        <aside className="company-list" aria-label="Companies">
-          <div className="company-list__header">
-            <Text fw={700}>{bucketLabel(effectiveBucket ?? 'other')}</Text>
-            <Badge variant="light" color="harbor">
-              {formatCount(companies.length)}
+      <div className="taxonomy-browser">
+        <aside
+          className="tree-pane tree-pane--categories"
+          aria-label="Company categories"
+        >
+          <div className="tree-pane__header">
+            <Group gap="xs">
+              <IconSitemap size={17} stroke={1.8} />
+              <Text fw={750} size="sm">
+                Categories
+              </Text>
+            </Group>
+            <Badge variant="light" color="harbor" size="sm">
+              {directoryQuery.data.category_count}
             </Badge>
           </div>
 
-          {bucketQuery.isPending ? (
-            <div className="company-list__loading">
-              <Loader size="sm" color="harbor" />
-              <Text size="sm" c="dimmed">
-                Loading this bucket…
+          <ScrollArea className="tree-pane__scroll" type="auto" scrollbarSize={6}>
+            <nav
+              className="category-tree"
+              aria-label="News taxonomy"
+              role="tree"
+            >
+              {categories.map((category) => {
+                const active = category.key === selectedCategory?.key;
+                return (
+                  <button
+                    type="button"
+                    key={category.key}
+                    className="category-node"
+                    role="treeitem"
+                    aria-level={1}
+                    aria-selected={active}
+                    aria-expanded={active}
+                    tabIndex={active ? 0 : -1}
+                    data-active={active || undefined}
+                    aria-current={active ? 'true' : undefined}
+                    onKeyDown={handleTreeNavigation}
+                    onClick={() => selectCategory(category)}
+                  >
+                    <span className="category-node__folder" aria-hidden="true">
+                      {active ? (
+                        <IconFolderOpen size={18} stroke={1.8} />
+                      ) : (
+                        <IconFolder size={18} stroke={1.8} />
+                      )}
+                    </span>
+                    <span className="category-node__copy">
+                      <span className="category-node__name">
+                        {category.name}
+                      </span>
+                      <span className="category-node__meta">
+                        {formatCompactCount(category.company_count)} companies ·{' '}
+                        {formatCompactCount(category.record_count)} articles
+                      </span>
+                    </span>
+                    <IconChevronRight
+                      className="category-node__chevron"
+                      size={15}
+                      stroke={1.8}
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
+            </nav>
+          </ScrollArea>
+        </aside>
+
+        <section
+          ref={companyPaneRef}
+          tabIndex={-1}
+          className="tree-pane tree-pane--companies"
+          aria-label={
+            selectedCategory
+              ? `Companies in ${selectedCategory.name}`
+              : 'Companies'
+          }
+        >
+          <div className="tree-pane__header tree-pane__header--stacked">
+            <div>
+              <Text className="tree-crumb">Categories /</Text>
+              <Text fw={750} size="sm" lineClamp={1}>
+                {selectedCategory?.name ?? 'Select a category'}
               </Text>
             </div>
-          ) : bucketQuery.isError ? (
-            <div className="company-list__error">
-              <Text size="sm">This bucket could not be loaded.</Text>
+            {selectedCategory ? (
+              <Badge variant="light" color="ember" size="sm">
+                {formatCount(selectedCategory.company_count)}
+              </Badge>
+            ) : null}
+          </div>
+
+          <div className="company-filter">
+            <TextInput
+              value={search}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+              placeholder="Filter loaded companies"
+              aria-label="Filter loaded companies in selected category"
+              leftSection={<IconSearch size={16} stroke={1.7} />}
+              size="sm"
+            />
+          </div>
+
+          {!selectedCategory ? (
+            <PaneState>
+              <Text size="sm" c="dimmed">
+                This snapshot has no categorized companies.
+              </Text>
+            </PaneState>
+          ) : categoryPageDescriptors.length === 0 ? (
+            <PaneState>
+              <Text size="sm" c="dimmed">
+                No companies are indexed in this category.
+              </Text>
+            </PaneState>
+          ) : categoryPagesQuery.isPending ? (
+            <PaneState>
+              <Loader size="sm" color="harbor" />
+              <Text size="sm" c="dimmed">
+                Loading this branch…
+              </Text>
+            </PaneState>
+          ) : categoryPagesQuery.isError ? (
+            <PaneState>
+              <Text size="sm">This category could not be loaded.</Text>
               <Button
                 variant="subtle"
                 color="ember"
                 size="xs"
-                onClick={() => void bucketQuery.refetch()}
+                onClick={() => void categoryPagesQuery.refetch()}
               >
                 Retry
               </Button>
-            </div>
+            </PaneState>
           ) : companies.length === 0 ? (
-            <div className="company-list__empty">
-              <Text size="sm" c="dimmed">
-                No company in this bucket matches “{search}”.
+            <PaneState>
+              <Text size="sm" c="dimmed" ta="center">
+                No company in this category matches “{search}”.
               </Text>
-            </div>
+            </PaneState>
           ) : (
-            <div className="company-list__items">
-              {companies.map((company) => (
-                <button
-                  type="button"
-                  key={company.company_key}
-                  className="company-row"
-                  data-active={
-                    selectedCompany?.company_key === company.company_key ||
-                    undefined
-                  }
-                  onClick={() => setSelectedCompany(company)}
-                >
-                  <span className="company-row__mark" aria-hidden="true">
-                    {company.company_name.trim()[0]?.toUpperCase() ?? '•'}
-                  </span>
-                  <span className="company-row__copy">
-                    <span className="company-row__name">
-                      {company.company_name}
-                    </span>
-                    <span className="company-row__meta">
-                      {formatCompactCount(company.record_count)} articles
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
+            <ScrollArea
+              className="tree-pane__scroll tree-pane__scroll--companies"
+              type="auto"
+              scrollbarSize={6}
+            >
+              <div
+                className="company-tree"
+                role="tree"
+                aria-label={`Companies in ${selectedCategory.name}`}
+              >
+                {companies.map((company, companyIndex) => {
+                  const active =
+                    company.company_key === selectedCompany?.company_key;
+                  return (
+                    <button
+                      type="button"
+                      key={company.company_key}
+                      className="company-node"
+                      role="treeitem"
+                      aria-level={2}
+                      aria-selected={active}
+                      tabIndex={
+                        active || (!selectedCompany && companyIndex === 0)
+                          ? 0
+                          : -1
+                      }
+                      data-active={active || undefined}
+                      aria-current={active ? 'true' : undefined}
+                      onKeyDown={handleTreeNavigation}
+                      onClick={() => selectCompany(company)}
+                    >
+                      <span className="company-node__branch" aria-hidden="true" />
+                      <span className="company-node__mark" aria-hidden="true">
+                        {company.company_name.trim()[0]?.toUpperCase() ?? '•'}
+                      </span>
+                      <span className="company-node__copy">
+                        <span className="company-node__name">
+                          {company.company_name}
+                        </span>
+                        <span className="company-node__meta">
+                          {formatCompactCount(company.record_count)} articles
+                        </span>
+                      </span>
+                      <IconChevronRight
+                        className="company-node__chevron"
+                        size={14}
+                        stroke={1.8}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  );
+                })}
+                {categoryPagesQuery.hasNextPage ? (
+                  <Button
+                    variant="subtle"
+                    color="harbor"
+                    size="xs"
+                    leftSection={<IconArrowDown size={14} />}
+                    loading={categoryPagesQuery.isFetchingNextPage}
+                    onClick={() => void categoryPagesQuery.fetchNextPage()}
+                    className="company-tree__more"
+                  >
+                    Load 100 more companies
+                  </Button>
+                ) : null}
+              </div>
+            </ScrollArea>
           )}
-        </aside>
+        </section>
 
         <CompanyDetail
+          category={selectedCategory ?? null}
           company={selectedCompany}
           generation={index.generation}
+          focusRef={articlePaneRef}
           onOpenArticle={onOpenArticle}
         />
       </div>
+
+      <Text size="xs" c="dimmed" className="tree-loading-note">
+        Only the open category and selected company branch are requested. Full
+        article content loads after you choose a headline.
+      </Text>
     </Stack>
   );
 }
 
+function PaneState({ children }: { children: React.ReactNode }) {
+  return <div className="tree-pane__state">{children}</div>;
+}
+
 interface CompanyDetailProps {
+  category: CategoryDescriptor | null;
   company: CompanyDirectoryEntry | null;
   generation: string;
+  focusRef: React.RefObject<HTMLElement | null>;
   onOpenArticle: (article: ArticleSummary) => void;
 }
 
 function CompanyDetail({
+  category,
   company,
   generation,
+  focusRef,
   onOpenArticle,
 }: CompanyDetailProps) {
   const manifestQuery = useQuery({
@@ -292,7 +514,9 @@ function CompanyDetail({
     queryKey: ['company-pages', generation, company?.company_key],
     queryFn: ({ pageParam, signal }) => {
       const descriptor = descriptors[pageParam];
-      if (!descriptor) throw new Error('Company page descriptor is unavailable');
+      if (!descriptor) {
+        throw new Error('Company page descriptor is unavailable');
+      }
       return dataClient.getBrowsePage(descriptor.path, generation, signal);
     },
     initialPageParam: 0,
@@ -304,97 +528,155 @@ function CompanyDetail({
 
   if (!company) {
     return (
-      <div className="company-detail company-detail--empty">
-        <div className="company-detail__empty-mark">
-          <IconBuilding size={30} stroke={1.5} />
+      <section
+        ref={focusRef}
+        tabIndex={-1}
+        className="article-branch article-branch--empty"
+        aria-label="Article branch"
+      >
+        <div className="article-branch__empty-mark">
+          <IconBuilding size={28} stroke={1.5} />
         </div>
         <Title order={3}>Choose a company</Title>
-        <Text c="dimmed" maw={410} ta="center">
-          Its article index will load here. Until then, no company article files
-          are requested.
+        <Text c="dimmed" maw={390} ta="center" size="sm">
+          Open a company node to reveal its article branch. Nothing from the
+          other companies is downloaded.
         </Text>
-      </div>
+      </section>
     );
   }
 
   if (manifestQuery.isPending) {
     return (
-      <div className="company-detail">
+      <section
+        ref={focusRef}
+        tabIndex={-1}
+        className="article-branch"
+        aria-label="Loading articles"
+      >
         <ArticleGridSkeleton count={2} />
-      </div>
+      </section>
     );
   }
 
   if (manifestQuery.isError) {
     return (
-      <div className="company-detail">
+      <section
+        ref={focusRef}
+        tabIndex={-1}
+        className="article-branch"
+        aria-label="Article load error"
+      >
         <ErrorState onRetry={() => void manifestQuery.refetch()} />
-      </div>
+      </section>
     );
   }
 
   if (!manifestQuery.data.article_index) {
     return (
-      <div className="company-detail">
+      <section
+        ref={focusRef}
+        tabIndex={-1}
+        className="article-branch"
+        aria-label="Article index unavailable"
+      >
         <ErrorState
           title="This snapshot predates company article pages"
           message="Regenerate company-news-data with the latest exporter, then refresh this page."
         />
-      </div>
+      </section>
     );
   }
 
   if (pagesQuery.isError) {
     return (
-      <div className="company-detail">
+      <section
+        ref={focusRef}
+        tabIndex={-1}
+        className="article-branch"
+        aria-label="Article load error"
+      >
         <ErrorState onRetry={() => void pagesQuery.refetch()} />
-      </div>
+      </section>
     );
   }
 
-  const articles =
-    pagesQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const articles = pagesQuery.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
-    <div className="company-detail">
-      <div className="company-detail__header">
-        <div className="company-detail__identity">
-          <span className="company-detail__mark" aria-hidden="true">
+    <section
+      ref={focusRef}
+      tabIndex={-1}
+      className="article-branch"
+      aria-label={`Articles from ${company.company_name}`}
+    >
+      <div className="article-branch__header">
+        <div className="article-branch__identity">
+          <span className="article-branch__mark" aria-hidden="true">
             {company.company_name.trim()[0]?.toUpperCase() ?? '•'}
           </span>
           <div>
-            <Text className="eyebrow">Company archive</Text>
-            <Title order={2}>{company.company_name}</Title>
+            <Text className="tree-crumb">
+              Categories / {category?.name ?? 'Category'} /
+            </Text>
+            <Title order={3}>{company.company_name}</Title>
           </div>
         </div>
-        <Group gap="lg" className="company-detail__stats">
-          <div>
-            <Text fw={700}>{formatCount(company.record_count)}</Text>
-            <Text size="xs" c="dimmed">
-              articles
-            </Text>
-          </div>
-          <div>
-            <Text fw={700}>{formatDate(company.last_published_at)}</Text>
-            <Text size="xs" c="dimmed">
-              latest
-            </Text>
-          </div>
-        </Group>
+        <div className="article-branch__stats">
+          <Text fw={750}>{formatCount(company.record_count)}</Text>
+          <Text size="xs" c="dimmed">
+            articles · latest {formatDate(company.last_published_at)}
+          </Text>
+        </div>
       </div>
 
-      {pagesQuery.isPending ? (
+      {descriptors.length === 0 ? (
+        <PaneState>
+          <Text size="sm" c="dimmed">
+            No articles are indexed for this company.
+          </Text>
+        </PaneState>
+      ) : pagesQuery.isPending ? (
         <ArticleGridSkeleton count={2} />
       ) : (
-        <SimpleGrid cols={{ base: 1, xl: 2 }} spacing="md">
+        <div className="article-tree" aria-label="Company article list">
           {articles.map((article) => (
-            <ArticleCard
+            <button
+              type="button"
+              className="article-node"
               key={article.document_id}
-              article={article}
-              onOpen={onOpenArticle}
-            />
+              aria-label={`Read ${article.title}`}
+              onClick={() => onOpenArticle(article)}
+            >
+              <span className="article-node__branch" aria-hidden="true">
+                <span />
+              </span>
+              <span className="article-node__icon" aria-hidden="true">
+                <IconFileText size={17} stroke={1.7} />
+              </span>
+              <span className="article-node__copy">
+                <span className="article-node__topline">
+                  <span>
+                    {formatDate(article.published_at ?? article.fetched_at)}
+                  </span>
+                  <span>{article.source_kind}</span>
+                </span>
+                <span className="article-node__title">{article.title}</span>
+                {article.summary ? (
+                  <span className="article-node__summary">
+                    {article.summary}
+                  </span>
+                ) : null}
+              </span>
+              <IconChevronRight
+                className="article-node__chevron"
+                size={16}
+                stroke={1.8}
+                aria-hidden="true"
+              />
+            </button>
           ))}
-        </SimpleGrid>
+        </div>
       )}
 
       {pagesQuery.hasNextPage ? (
@@ -404,11 +686,11 @@ function CompanyDetail({
           leftSection={<IconArrowDown size={16} />}
           loading={pagesQuery.isFetchingNextPage}
           onClick={() => void pagesQuery.fetchNextPage()}
-          className="company-detail__more"
+          className="article-branch__more"
         >
           Load more from {company.company_name}
         </Button>
       ) : null}
-    </div>
+    </section>
   );
 }

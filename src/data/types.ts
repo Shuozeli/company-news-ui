@@ -1,8 +1,9 @@
 export interface DataIndex {
-  contract_version: '1.0.0';
+  contract_version: '1.0.0' | '1.1.0';
   dataset: 'company-news-data';
   schema_version: string;
   generation: string;
+  taxonomy_generation?: string;
   generated_at: string;
   record_count: number;
   company_count: number;
@@ -11,6 +12,7 @@ export interface DataIndex {
     archive_manifest: string;
     recent_manifest: string;
     company_directory_manifest: string;
+    category_directory_manifest?: string;
     openapi: string;
     content_rights: string;
   };
@@ -90,6 +92,47 @@ export interface CompanyDirectoryBucket {
   generation: string;
   bucket: string;
   company_count: number;
+  companies: CompanyDirectoryEntry[];
+}
+
+export interface CategoryDescriptor {
+  key: string;
+  name: string;
+  company_count: number;
+  record_count: number;
+  page_count: number;
+  pages: CategoryPageDescriptor[];
+}
+
+export interface CategoryPageDescriptor {
+  page: number;
+  path: string;
+  company_count: number;
+  record_count: number;
+  byte_count: number;
+  sha256: string;
+}
+
+export interface CategoryDirectoryManifest {
+  schema_version: string;
+  generation: string;
+  taxonomy_generation: string;
+  company_count: number;
+  record_count: number;
+  category_count: number;
+  page_size: 100;
+  categories: CategoryDescriptor[];
+}
+
+export interface CategoryDirectoryPage {
+  schema_version: string;
+  generation: string;
+  taxonomy_generation: string;
+  key: string;
+  name: string;
+  page: number;
+  company_count: number;
+  record_count: number;
   companies: CompanyDirectoryEntry[];
 }
 
