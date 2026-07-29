@@ -33,6 +33,12 @@ pnpm lint
 pnpm build
 ```
 
+The production build remains a normal Vite SPA. Its final packaging step adds a
+small standards-based `fetch()` worker at `dist/server/index.js` and copies the
+Sites project metadata into `dist/.openai/`. The worker delegates static files
+to the hosting provider's `ASSETS` binding and provides an HTML fallback for
+client-side routes.
+
 The default data source is the raw `main` branch of `company-news-data`. To use
 another compatible location:
 
