@@ -12,7 +12,7 @@ import type {
 } from './types';
 
 export const DEFAULT_DATA_BASE_URL =
-  'https://raw.githubusercontent.com/Shuozeli/company-news-data/main/';
+  'https://raw.githubusercontent.com/datayuacx26/company-news-data/main/';
 
 export class DataRequestError extends Error {
   readonly path: string;
