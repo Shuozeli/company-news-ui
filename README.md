@@ -8,7 +8,7 @@ blogs, press pages, and engineering sources.
 
 - [Open the live reader](https://shuozeli.github.io/company-news-ui/)
 - [Open the Apple article branch](https://shuozeli.github.io/company-news-ui/?category=technology-3169ce6442acdc81&company=apple)
-- [Inspect the versioned data](https://github.com/Shuozeli/company-news-data)
+- [Inspect the versioned data](https://github.com/datayuacx26/company-news-data)
 
 The reader is deliberately small at startup. It fetches one root `index.json`,
 then follows only the category, company, and article paths selected by the
@@ -32,7 +32,7 @@ Vite + React + Mantine static reader
 | Component | Repository | Responsibility |
 | --- | --- | --- |
 | Pipeline | [`company-feed-server`](https://github.com/Shuozeli/company-feed-server) | Discovers and checks company sources, crawls articles, and exports normalized snapshots |
-| Versioned data | [`company-news-data`](https://github.com/Shuozeli/company-news-data) | Stores the generated static tree, schemas, provenance records, and article Markdown |
+| Versioned data | [`company-news-data`](https://github.com/datayuacx26/company-news-data) | Stores the generated static tree, schemas, provenance records, and article Markdown |
 | Static reader | [`company-news-ui`](https://github.com/Shuozeli/company-news-ui) | Navigates the archive without a database or application server |
 
 The static contract looks like this:
@@ -98,7 +98,7 @@ Start with [CONTRIBUTING.md](./CONTRIBUTING.md). UI bugs belong in this
 repository. Source discovery, crawl correctness, and company/article data
 corrections belong in
 [`company-feed-server`](https://github.com/Shuozeli/company-feed-server) or
-[`company-news-data`](https://github.com/Shuozeli/company-news-data), as
+[`company-news-data`](https://github.com/datayuacx26/company-news-data), as
 described by the issue chooser.
 
 ## Rights and licensing
@@ -106,4 +106,4 @@ described by the issue chooser.
 The reader source is MIT licensed. Archived article text, images, trademarks,
 and other publisher material are not relicensed by this repository. They remain
 subject to the rights and terms of their original publishers; see
-[`CONTENT_RIGHTS.md`](https://github.com/Shuozeli/company-news-data/blob/main/CONTENT_RIGHTS.md).
+[`CONTENT_RIGHTS.md`](https://github.com/datayuacx26/company-news-data/blob/main/CONTENT_RIGHTS.md).

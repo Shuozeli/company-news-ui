@@ -19,5 +19,5 @@ can use the normal issue templates.
 This repository contains a static client. Vulnerabilities in crawling,
 normalization, or data publication should be reported to
 [`company-feed-server`](https://github.com/Shuozeli/company-feed-server/security)
-or [`company-news-data`](https://github.com/Shuozeli/company-news-data/security)
+or [`company-news-data`](https://github.com/datayuacx26/company-news-data/security)
 as appropriate.

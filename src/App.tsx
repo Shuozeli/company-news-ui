@@ -162,7 +162,7 @@ export default function App() {
                   </Button>
                   <Button
                     component="a"
-                    href="https://github.com/Shuozeli/company-news-data"
+                    href="https://github.com/datayuacx26/company-news-data"
                     target="_blank"
                     rel="noreferrer"
                     variant="subtle"
@@ -307,7 +307,7 @@ export default function App() {
               Reader <IconArrowUpRight size={14} />
             </a>
             <a
-              href="https://github.com/Shuozeli/company-news-data"
+              href="https://github.com/datayuacx26/company-news-data"
               target="_blank"
               rel="noreferrer"
             >

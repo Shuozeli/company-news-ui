@@ -9,7 +9,7 @@ Thanks for helping improve the Company News reader.
 - Source discovery, crawl recipes, normalization, and exporter behavior:
   [`company-feed-server`](https://github.com/Shuozeli/company-feed-server/issues)
 - Generated snapshot structure or a published data correction:
-  [`company-news-data`](https://github.com/Shuozeli/company-news-data/issues)
+  [`company-news-data`](https://github.com/datayuacx26/company-news-data/issues)
 
 Please do not edit generated article or index files through the UI repository.
 Fix the responsible source or exporter so the next snapshot is reproducible.
