@@ -18,16 +18,18 @@ import {
   IconNews,
   IconSitemap,
 } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { ArticleCard } from '../components/ArticleCard';
 import { CategoryGrid } from '../components/CategoryGrid';
 import { ArticleGridSkeleton, ErrorState } from '../components/StateViews';
-import { dataClient } from '../data/client';
 import type { ArticleSummary } from '../data/types';
-import { useIndex } from '../hooks/useIndex';
-import { formatCount, formatDateTime } from '../lib/format';
+import {
+  useCategoryDirectoryV2,
+  useConfigV2,
+  useRecentArticlesV2,
+} from '../hooks/useV2';
+import { formatCount } from '../lib/format';
 import { articleHrefFor, exploreHref, latestHref } from '../lib/routes';
 
 const HOME_CATEGORY_LIMIT = 6;
@@ -35,59 +37,19 @@ const HOME_LATEST_LIMIT = 6;
 
 export function HomePage() {
   const navigate = useNavigate();
-  const indexQuery = useIndex();
-  const index = indexQuery.data;
-  const generation = index?.generation;
-  const categoryManifestPath = index?.paths.category_directory_manifest;
-  const taxonomyGeneration = index?.taxonomy_generation;
+
+  // Everything on the home page now comes from the v2 reader: snapshot counts
+  // + recent feed + the category teaser grid.
+  const configV2Query = useConfigV2();
+  const configV2 = configV2Query.data;
+  const recentQuery = useRecentArticlesV2(HOME_LATEST_LIMIT);
+  const directoryQuery = useCategoryDirectoryV2();
 
   const openArticle = (article: ArticleSummary) => {
-    navigate(articleHrefFor(article), { state: { article } });
+    navigate(articleHrefFor(article));
   };
 
-  const directoryQuery = useQuery({
-    queryKey: ['category-directory', generation, taxonomyGeneration],
-    enabled: Boolean(index && categoryManifestPath && taxonomyGeneration),
-    staleTime: 60_000,
-    queryFn: ({ signal }) => {
-      if (!index || !categoryManifestPath || !taxonomyGeneration) {
-        throw new Error('Category directory path is unavailable');
-      }
-      return dataClient.getCategoryDirectory(
-        categoryManifestPath,
-        index.generation,
-        taxonomyGeneration,
-        signal,
-      );
-    },
-  });
-
-  const recentManifestQuery = useQuery({
-    queryKey: ['recent-manifest', generation],
-    enabled: Boolean(index),
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: ({ signal }) => {
-      if (!index) throw new Error('Index unavailable');
-      return dataClient.getRecentManifest(
-        index.paths.recent_manifest,
-        index.generation,
-        signal,
-      );
-    },
-  });
-
-  const firstRecentPath = recentManifestQuery.data?.pages[0]?.path;
-  const recentPageQuery = useQuery({
-    queryKey: ['recent-page-first', generation],
-    enabled: Boolean(index && firstRecentPath),
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: ({ signal }) => {
-      if (!index || !firstRecentPath) throw new Error('Recent page unavailable');
-      return dataClient.getBrowsePage(firstRecentPath, index.generation, signal);
-    },
-  });
-
-  const latest = recentPageQuery.data?.items.slice(0, HOME_LATEST_LIMIT) ?? [];
+  const latest = recentQuery.data ?? [];
   const categories = directoryQuery.data?.categories ?? [];
 
   return (
@@ -146,30 +108,30 @@ export function HomePage() {
             <div className="hero__side">
               <div className="snapshot-card">
                 <Text className="eyebrow">Current data snapshot</Text>
-                {indexQuery.isPending ? (
+                {configV2Query.isPending ? (
                   <Stack gap="md" mt="md">
                     <Skeleton height={46} />
                     <Skeleton height={46} />
                     <Skeleton height={13} width="75%" />
                   </Stack>
-                ) : index ? (
+                ) : configV2 ? (
                   <>
                     <div className="snapshot-card__stats">
                       <SnapshotStat
                         icon={<IconNews size={20} />}
-                        value={formatCount(index.record_count)}
+                        value={formatCount(configV2.record_count)}
                         label="articles"
                       />
                       <SnapshotStat
                         icon={<IconBuilding size={20} />}
-                        value={formatCount(index.company_count)}
+                        value={formatCount(configV2.company_count)}
                         label="companies"
                       />
                     </div>
                     <Group gap={7} mt="md" className="snapshot-card__generated">
                       <IconDatabase size={15} stroke={1.7} />
                       <Text size="xs">
-                        Generated {formatDateTime(index.generated_at)}
+                        Snapshot {configV2.generation.slice(0, 12)}
                       </Text>
                     </Group>
                   </>
@@ -215,14 +177,7 @@ export function HomePage() {
               </Anchor>
             </Group>
 
-            {indexQuery.isError ? (
-              <ErrorState onRetry={() => void indexQuery.refetch()} />
-            ) : !categoryManifestPath || !taxonomyGeneration ? (
-              <ErrorState
-                title="This snapshot does not include the category tree"
-                message="Publish company-news-data with the taxonomy-aware exporter, then refresh this reader."
-              />
-            ) : directoryQuery.isPending ? (
+            {directoryQuery.isPending ? (
               <ArticleGridSkeleton count={6} />
             ) : directoryQuery.isError ? (
               <ErrorState onRetry={() => void directoryQuery.refetch()} />
@@ -242,11 +197,9 @@ export function HomePage() {
               </Anchor>
             </Group>
 
-            {recentManifestQuery.isError ? (
-              <ErrorState onRetry={() => void recentManifestQuery.refetch()} />
-            ) : recentPageQuery.isError ? (
-              <ErrorState onRetry={() => void recentPageQuery.refetch()} />
-            ) : recentManifestQuery.isPending || recentPageQuery.isPending ? (
+            {recentQuery.isError ? (
+              <ErrorState onRetry={() => void recentQuery.refetch()} />
+            ) : recentQuery.isPending ? (
               <ArticleGridSkeleton />
             ) : latest.length === 0 ? (
               <div className="empty-state">

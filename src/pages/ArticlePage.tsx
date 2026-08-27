@@ -6,8 +6,6 @@ import {
   Container,
   Divider,
   Group,
-  Loader,
-  Skeleton,
   Stack,
   Text,
   Title,
@@ -18,78 +16,23 @@ import {
   IconCalendar,
   IconDatabase,
 } from '@tabler/icons-react';
-import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
 
 import { ArticleGridSkeleton, ErrorState } from '../components/StateViews';
-import { dataClient, stripArchiveFrontmatter } from '../data/client';
-import type { ArticleSummary } from '../data/types';
-import { resolveArticleSummary, useCompanyEntry } from '../hooks/useCompanyData';
-import { useIndex } from '../hooks/useIndex';
+import { stripArchiveFrontmatter } from '../data/client';
+import { useArticleV2 } from '../hooks/useV2';
 import { formatDate, formatDateTime } from '../lib/format';
 import { companyHref, exploreHref } from '../lib/routes';
 
+// v2 permalink: the doc_id alone resolves the article via its hash bucket, so a
+// single fetch yields both the metadata and the Markdown body (they live in one
+// immutable data file). No company-directory / manifest walk is needed anymore.
 export function ArticlePage() {
   const { companyKey = '', documentId = '' } = useParams();
-  const location = useLocation();
-  const passedArticle =
-    (location.state as { article?: ArticleSummary } | null)?.article ?? null;
-  const needsResolve = !passedArticle;
-
-  const indexQuery = useIndex();
-  const index = indexQuery.data;
-  const generation = index?.generation;
-  const directoryManifestPath = index?.paths.company_directory_manifest;
-
-  // Only resolve the company + article ref from scratch on a cold (shared-link)
-  // load. When arriving from a list, the ArticleSummary rides in router state.
-  const entryQuery = useCompanyEntry(
-    needsResolve ? companyKey : undefined,
-    directoryManifestPath,
-    generation,
-  );
-  const entry = entryQuery.data;
-
-  const summaryQuery = useQuery({
-    queryKey: ['article-summary', generation, companyKey, documentId],
-    enabled: Boolean(needsResolve && entry && generation && documentId),
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: ({ signal }) => {
-      if (!entry || !generation) throw new Error('Missing article lookup inputs');
-      return resolveArticleSummary(
-        entry.company_manifest_path,
-        documentId,
-        generation,
-        signal,
-      );
-    },
-  });
-
-  const article = passedArticle ?? summaryQuery.data ?? null;
-
-  const articleQuery = useQuery({
-    queryKey: ['article', generation, article?.document_id],
-    enabled: Boolean(article && generation),
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: ({ signal }) => {
-      if (!article || !generation) throw new Error('No article to load');
-      return dataClient.getArticle(
-        article.record_path,
-        article.article_path,
-        generation,
-        signal,
-      );
-    },
-  });
-
-  const resolving =
-    needsResolve &&
-    (indexQuery.isPending ||
-      entryQuery.isPending ||
-      summaryQuery.isPending ||
-      (summaryQuery.isFetching && !summaryQuery.data));
+  const articleQuery = useArticleV2(documentId);
+  const article = articleQuery.data ?? null;
 
   const crumbs = (
     <Breadcrumbs separator="/">
@@ -110,25 +53,19 @@ export function ArticlePage() {
       <Stack gap="lg">
         {crumbs}
 
-        {indexQuery.isError ? (
-          <ErrorState onRetry={() => void indexQuery.refetch()} />
-        ) : entryQuery.isError ? (
-          <ErrorState
-            title="Company not found"
-            message="This article's company is not part of the current snapshot."
-          />
-        ) : summaryQuery.isError ? (
+        {articleQuery.isPending ? (
+          <ArticleGridSkeleton count={2} />
+        ) : articleQuery.isError || !article ? (
           <ErrorState
             title="Article not found"
             message="This article is not in the current snapshot. It may have been superseded by a newer generation."
+            onRetry={() => void articleQuery.refetch()}
           />
-        ) : resolving || !article ? (
-          <ArticleGridSkeleton count={2} />
         ) : (
           <article>
             <Button
               component={Link}
-              to={companyHref(companyKey)}
+              to={companyHref(article.company_key)}
               variant="subtle"
               color="dark"
               size="sm"
@@ -160,7 +97,7 @@ export function ArticlePage() {
                 <Group gap="xs" c="dimmed">
                   <IconCalendar size={17} stroke={1.7} aria-hidden="true" />
                   <Text size="sm">
-                    {formatDate(article.published_at ?? article.fetched_at)}
+                    {formatDate(article.published_at ?? article.first_seen_at)}
                   </Text>
                 </Group>
                 <Button
@@ -180,55 +117,36 @@ export function ArticlePage() {
             <Divider my="md" />
 
             <div className="article-reader__content">
-              {articleQuery.isPending ? (
-                <Stack gap="md">
-                  <Group gap="sm">
-                    <Loader size="sm" color="harbor" />
-                    <Text c="dimmed" size="sm">
-                      Loading this article&rsquo;s record and Markdown&hellip;
-                    </Text>
-                  </Group>
-                  <Skeleton height={16} width="92%" />
-                  <Skeleton height={16} width="100%" />
-                  <Skeleton height={16} width="84%" />
-                  <Skeleton height={210} mt="md" />
-                </Stack>
-              ) : articleQuery.isError ? (
-                <ErrorState onRetry={() => void articleQuery.refetch()} />
-              ) : (
-                <>
-                  <div className="markdown-body">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        a: ({ href, children }) => (
-                          <a href={href} target="_blank" rel="noreferrer">
-                            {children}
-                          </a>
-                        ),
-                        img: ({ src, alt }) => (
-                          <img src={src} alt={alt ?? ''} loading="lazy" />
-                        ),
-                      }}
-                    >
-                      {stripArchiveFrontmatter(articleQuery.data.markdown)}
-                    </ReactMarkdown>
-                  </div>
+              <div className="markdown-body">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    a: ({ href, children }) => (
+                      <a href={href} target="_blank" rel="noreferrer">
+                        {children}
+                      </a>
+                    ),
+                    img: ({ src, alt }) => (
+                      <img src={src} alt={alt ?? ''} loading="lazy" />
+                    ),
+                  }}
+                >
+                  {stripArchiveFrontmatter(article.body_markdown)}
+                </ReactMarkdown>
+              </div>
 
-                  <div className="article-provenance">
-                    <Group gap="xs" c="dimmed">
-                      <IconDatabase size={16} stroke={1.7} aria-hidden="true" />
-                      <Text size="xs" fw={700}>
-                        Archive record
-                      </Text>
-                    </Group>
-                    <Text size="xs" c="dimmed">
-                      Fetched {formatDateTime(articleQuery.data.record.fetched_at)}.
-                      Copyright remains with the original publisher.
-                    </Text>
-                  </div>
-                </>
-              )}
+              <div className="article-provenance">
+                <Group gap="xs" c="dimmed">
+                  <IconDatabase size={16} stroke={1.7} aria-hidden="true" />
+                  <Text size="xs" fw={700}>
+                    Archive record
+                  </Text>
+                </Group>
+                <Text size="xs" c="dimmed">
+                  First seen {formatDateTime(article.first_seen_at)}. Copyright
+                  remains with the original publisher.
+                </Text>
+              </div>
             </div>
           </article>
         )}

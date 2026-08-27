@@ -2,12 +2,20 @@ import { Group, SimpleGrid } from '@mantine/core';
 import { IconArrowRight, IconFolder } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 
-import type { CategoryDescriptor } from '../data/types';
 import { formatCompactCount } from '../lib/format';
 import { categoryHref } from '../lib/routes';
 
+// Minimal shape the grid renders. Both the v1 CategoryDescriptor and the v2
+// CategoryV2 are structurally assignable to this, so the grid is source-agnostic.
+export interface CategoryCard {
+  key: string;
+  name: string;
+  company_count: number;
+  record_count: number;
+}
+
 interface CategoryGridProps {
-  categories: CategoryDescriptor[];
+  categories: CategoryCard[];
   limit?: number;
 }
 

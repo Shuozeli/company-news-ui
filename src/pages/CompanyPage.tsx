@@ -13,62 +13,23 @@ import {
   IconChevronRight,
   IconFileText,
 } from '@tabler/icons-react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 
 import { ArticleGridSkeleton, ErrorState } from '../components/StateViews';
-import { dataClient } from '../data/client';
-import { useCompanyEntry } from '../hooks/useCompanyData';
-import { useIndex } from '../hooks/useIndex';
+import { useCompanyArticlesV2, useCompanyIndexV2 } from '../hooks/useV2';
 import { formatCount, formatDate } from '../lib/format';
 import { articleHrefFor, exploreHref } from '../lib/routes';
 
+// v2 company page: the company bucket gives the display name + month list, and
+// each infinite "page" is one month of that company's articles (newest first).
 export function CompanyPage() {
   const { companyKey = '' } = useParams();
-  const indexQuery = useIndex();
-  const index = indexQuery.data;
-  const generation = index?.generation;
-  const directoryManifestPath = index?.paths.company_directory_manifest;
+  const indexQuery = useCompanyIndexV2(companyKey);
+  const entry = indexQuery.data ?? null;
+  const months = entry?.months;
 
-  const entryQuery = useCompanyEntry(
-    companyKey,
-    directoryManifestPath,
-    generation,
-  );
-  const entry = entryQuery.data;
-
-  const manifestQuery = useQuery({
-    queryKey: ['company-manifest', generation, entry?.company_key],
-    enabled: Boolean(entry && generation),
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: ({ signal }) => {
-      if (!entry || !generation) throw new Error('No company selected');
-      return dataClient.getCompanyManifest(
-        entry.company_manifest_path,
-        generation,
-        signal,
-      );
-    },
-  });
-
-  const descriptors = manifestQuery.data?.article_index?.pages ?? [];
-  const pagesQuery = useInfiniteQuery({
-    queryKey: ['company-pages', generation, entry?.company_key],
-    enabled: Boolean(generation && descriptors.length > 0),
-    staleTime: Number.POSITIVE_INFINITY,
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) => {
-      const descriptor = descriptors[pageParam];
-      if (!descriptor || !generation) {
-        throw new Error('Company page descriptor is unavailable');
-      }
-      return dataClient.getBrowsePage(descriptor.path, generation, signal);
-    },
-    getNextPageParam: (_lastPage, loadedPages) =>
-      loadedPages.length < descriptors.length ? loadedPages.length : undefined,
-  });
-
-  const articles = pagesQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const pagesQuery = useCompanyArticlesV2(companyKey, months);
+  const articles = pagesQuery.data?.pages.flatMap((page) => page) ?? [];
 
   const crumbs = (
     <Breadcrumbs separator="/">
@@ -86,18 +47,15 @@ export function CompanyPage() {
       <Stack gap="lg">
         {crumbs}
 
-        {indexQuery.isPending || entryQuery.isPending ? (
+        {indexQuery.isPending ? (
           <ArticleGridSkeleton count={4} />
         ) : indexQuery.isError ? (
           <ErrorState onRetry={() => void indexQuery.refetch()} />
-        ) : entryQuery.isError ? (
+        ) : !entry ? (
           <ErrorState
             title="Company not found"
             message="This company is not part of the current snapshot."
-            onRetry={() => void entryQuery.refetch()}
           />
-        ) : !entry ? (
-          <ErrorState title="Company not found" />
         ) : (
           <>
             <div className="section-heading">
@@ -111,21 +69,12 @@ export function CompanyPage() {
                 </div>
               </Group>
               <Text c="dimmed" size="sm" mt={6}>
-                {formatCount(entry.record_count)} articles &middot; latest{' '}
-                {formatDate(entry.last_published_at)}
+                {formatCount(entry.article_count)} articles &middot; latest{' '}
+                {months && months[0] ? months[0] : '—'}
               </Text>
             </div>
 
-            {manifestQuery.isPending ? (
-              <ArticleGridSkeleton count={3} />
-            ) : manifestQuery.isError ? (
-              <ErrorState onRetry={() => void manifestQuery.refetch()} />
-            ) : !manifestQuery.data.article_index ? (
-              <ErrorState
-                title="This snapshot predates company article pages"
-                message="Regenerate company-news-data with the latest exporter, then refresh this page."
-              />
-            ) : pagesQuery.isError ? (
+            {pagesQuery.isError ? (
               <ErrorState onRetry={() => void pagesQuery.refetch()} />
             ) : pagesQuery.isPending ? (
               <ArticleGridSkeleton count={3} />
@@ -139,7 +88,6 @@ export function CompanyPage() {
                   <Link
                     key={article.document_id}
                     to={articleHrefFor(article)}
-                    state={{ article }}
                     className="article-row"
                     aria-label={`Read ${article.title}`}
                   >

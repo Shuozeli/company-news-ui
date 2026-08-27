@@ -11,8 +11,10 @@ import type {
   RecentManifest,
 } from './types';
 
+// Dedicated data-host account (datayuacx26 was shadowbanned; see memory
+// datayuacx26-github-suspended-incident). This repo holds the v2-only archive.
 export const DEFAULT_DATA_BASE_URL =
-  'https://raw.githubusercontent.com/datayuacx26/company-news-data/main/';
+  'https://raw.githubusercontent.com/yuacxshard1/company-news-data/main/';
 
 export class DataRequestError extends Error {
   readonly path: string;

@@ -2,65 +2,33 @@ import {
   Button,
   Center,
   Container,
-  Group,
   SimpleGrid,
   Stack,
   Text,
   Title,
 } from '@mantine/core';
 import { IconArrowDown } from '@tabler/icons-react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { ArticleCard } from '../components/ArticleCard';
 import { ArticleGridSkeleton, ErrorState } from '../components/StateViews';
-import { dataClient } from '../data/client';
 import type { ArticleSummary } from '../data/types';
-import { useIndex } from '../hooks/useIndex';
+import { useLatestArticlesV2 } from '../hooks/useV2';
 import { formatCount } from '../lib/format';
 import { articleHrefFor } from '../lib/routes';
 
+// v2: the recency feed is paged by DAY. Each day file already carries summary
+// rows, so a page load is one fetch and renders straight into cards -- no
+// per-article body fetch.
 export function LatestPage() {
   const navigate = useNavigate();
-  const indexQuery = useIndex();
-  const index = indexQuery.data;
+  const pagesQuery = useLatestArticlesV2();
 
   const openArticle = (article: ArticleSummary) => {
-    navigate(articleHrefFor(article), { state: { article } });
+    navigate(articleHrefFor(article));
   };
 
-  const manifestQuery = useQuery({
-    queryKey: ['recent-manifest', index?.generation],
-    enabled: Boolean(index),
-    staleTime: Number.POSITIVE_INFINITY,
-    queryFn: ({ signal }) => {
-      if (!index) throw new Error('Index unavailable');
-      return dataClient.getRecentManifest(
-        index.paths.recent_manifest,
-        index.generation,
-        signal,
-      );
-    },
-  });
-
-  const descriptors = manifestQuery.data?.pages ?? [];
-  const pagesQuery = useInfiniteQuery({
-    queryKey: ['recent-pages', index?.generation],
-    enabled: Boolean(index && descriptors.length > 0),
-    staleTime: Number.POSITIVE_INFINITY,
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) => {
-      const descriptor = descriptors[pageParam];
-      if (!index || !descriptor) {
-        throw new Error('Recent page descriptor is unavailable');
-      }
-      return dataClient.getBrowsePage(descriptor.path, index.generation, signal);
-    },
-    getNextPageParam: (_lastPage, loadedPages) =>
-      loadedPages.length < descriptors.length ? loadedPages.length : undefined,
-  });
-
-  const articles = pagesQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const articles = pagesQuery.data?.pages.flatMap((page) => page) ?? [];
 
   return (
     <Container size="xl" className="content-shell">
@@ -70,41 +38,32 @@ export function LatestPage() {
           <Title order={2}>Recent company updates</Title>
         </div>
 
-        {indexQuery.isPending || manifestQuery.isPending ? (
+        {pagesQuery.isPending ? (
           <ArticleGridSkeleton />
-        ) : indexQuery.isError ? (
-          <ErrorState onRetry={() => void indexQuery.refetch()} />
-        ) : manifestQuery.isError ? (
-          <ErrorState onRetry={() => void manifestQuery.refetch()} />
-        ) : manifestQuery.data.record_count === 0 ? (
+        ) : pagesQuery.isError ? (
+          <ErrorState onRetry={() => void pagesQuery.refetch()} />
+        ) : articles.length === 0 ? (
           <div className="empty-state">
             <Text fw={650}>No articles have been published yet.</Text>
             <Text c="dimmed" size="sm">
               The next generated snapshot will appear here automatically.
             </Text>
           </div>
-        ) : pagesQuery.isError ? (
-          <ErrorState onRetry={() => void pagesQuery.refetch()} />
         ) : (
           <>
             <Text c="dimmed" size="sm">
-              Showing {formatCount(articles.length)} of{' '}
-              {formatCount(manifestQuery.data.record_count)}
+              Showing {formatCount(articles.length)}
             </Text>
 
-            {pagesQuery.isPending ? (
-              <ArticleGridSkeleton />
-            ) : (
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
-                {articles.map((article) => (
-                  <ArticleCard
-                    key={article.document_id}
-                    article={article}
-                    onOpen={openArticle}
-                  />
-                ))}
-              </SimpleGrid>
-            )}
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+              {articles.map((article) => (
+                <ArticleCard
+                  key={article.document_id}
+                  article={article}
+                  onOpen={openArticle}
+                />
+              ))}
+            </SimpleGrid>
 
             {pagesQuery.hasNextPage ? (
               <Center>
@@ -117,7 +76,7 @@ export function LatestPage() {
                   loading={pagesQuery.isFetchingNextPage}
                   onClick={() => void pagesQuery.fetchNextPage()}
                 >
-                  Load 50 more
+                  Load more days
                 </Button>
               </Center>
             ) : articles.length > 0 ? (

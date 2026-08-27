@@ -1,34 +1,15 @@
 import { Container, Stack, Text, Title } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
 
 import { CategoryGrid } from '../components/CategoryGrid';
 import { ArticleGridSkeleton, ErrorState } from '../components/StateViews';
-import { dataClient } from '../data/client';
-import { useIndex } from '../hooks/useIndex';
+import { useCategoryDirectoryV2 } from '../hooks/useV2';
 import { formatCount } from '../lib/format';
 
+// v2: the category directory is a single `taxonomy/directory.json` (all
+// categories + aggregate counts), so no manifest-path indirection is needed.
 export function ExplorePage() {
-  const indexQuery = useIndex();
-  const index = indexQuery.data;
-  const categoryManifestPath = index?.paths.category_directory_manifest;
-  const taxonomyGeneration = index?.taxonomy_generation;
-
-  const directoryQuery = useQuery({
-    queryKey: ['category-directory', index?.generation, taxonomyGeneration],
-    enabled: Boolean(index && categoryManifestPath && taxonomyGeneration),
-    staleTime: 60_000,
-    queryFn: ({ signal }) => {
-      if (!index || !categoryManifestPath || !taxonomyGeneration) {
-        throw new Error('Category directory path is unavailable');
-      }
-      return dataClient.getCategoryDirectory(
-        categoryManifestPath,
-        index.generation,
-        taxonomyGeneration,
-        signal,
-      );
-    },
-  });
+  const directoryQuery = useCategoryDirectoryV2();
+  const directory = directoryQuery.data;
 
   return (
     <Container size="xl" className="content-shell">
@@ -38,24 +19,17 @@ export function ExplorePage() {
           <Title order={2}>Browse by category</Title>
         </div>
 
-        {indexQuery.isPending || directoryQuery.isPending ? (
+        {directoryQuery.isPending ? (
           <ArticleGridSkeleton count={6} />
-        ) : indexQuery.isError ? (
-          <ErrorState onRetry={() => void indexQuery.refetch()} />
-        ) : !categoryManifestPath || !taxonomyGeneration ? (
-          <ErrorState
-            title="This snapshot does not include the category tree"
-            message="Publish company-news-data with the taxonomy-aware exporter, then refresh this reader."
-          />
-        ) : directoryQuery.isError ? (
+        ) : directoryQuery.isError || !directory ? (
           <ErrorState onRetry={() => void directoryQuery.refetch()} />
         ) : (
           <>
             <Text c="dimmed" size="sm">
-              {formatCount(directoryQuery.data.category_count)} categories &middot;{' '}
-              {formatCount(directoryQuery.data.company_count)} companies
+              {formatCount(directory.category_count)} categories &middot;{' '}
+              {formatCount(directory.company_count)} companies
             </Text>
-            <CategoryGrid categories={directoryQuery.data.categories} />
+            <CategoryGrid categories={directory.categories} />
           </>
         )}
       </Stack>

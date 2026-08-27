@@ -77,7 +77,7 @@ export function Layout() {
               Reader <IconArrowUpRight size={14} />
             </a>
             <a
-              href="https://github.com/datayuacx26/company-news-data"
+              href="https://github.com/yuacxshard1/company-news-data"
               target="_blank"
               rel="noreferrer"
             >

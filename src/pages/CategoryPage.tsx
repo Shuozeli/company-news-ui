@@ -11,14 +11,12 @@ import {
   Title,
 } from '@mantine/core';
 import { IconArrowRight, IconSearch } from '@tabler/icons-react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { ArticleGridSkeleton, ErrorState } from '../components/StateViews';
-import { dataClient } from '../data/client';
-import type { CompanyDirectoryEntry } from '../data/types';
-import { useIndex } from '../hooks/useIndex';
+import type { CategoryCompanyV2 } from '../data/client_v2';
+import { useCategoryV2 } from '../hooks/useV2';
 import { formatCompactCount, formatCount, formatDate } from '../lib/format';
 import { companyHref, exploreHref } from '../lib/routes';
 
@@ -37,9 +35,9 @@ function toTime(value: string | null): number {
 }
 
 function sortCompanies(
-  companies: CompanyDirectoryEntry[],
+  companies: CategoryCompanyV2[],
   mode: SortMode,
-): CompanyDirectoryEntry[] {
+): CategoryCompanyV2[] {
   const copy = [...companies];
   switch (mode) {
     case 'articles':
@@ -63,82 +61,17 @@ function sortCompanies(
   }
 }
 
+// v2: one `taxonomy/categories/<key>.json` holds the whole company list (name +
+// counts + per-company record_count/last_published_at), so a single fetch backs
+// the page and search/sort run client-side. No pagination or manifest walk.
 export function CategoryPage() {
   const { categoryKey = '' } = useParams();
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('articles');
-  const indexQuery = useIndex();
-  const index = indexQuery.data;
-  const categoryManifestPath = index?.paths.category_directory_manifest;
-  const taxonomyGeneration = index?.taxonomy_generation;
 
-  const directoryQuery = useQuery({
-    queryKey: ['category-directory', index?.generation, taxonomyGeneration],
-    enabled: Boolean(index && categoryManifestPath && taxonomyGeneration),
-    staleTime: 60_000,
-    queryFn: ({ signal }) => {
-      if (!index || !categoryManifestPath || !taxonomyGeneration) {
-        throw new Error('Category directory path is unavailable');
-      }
-      return dataClient.getCategoryDirectory(
-        categoryManifestPath,
-        index.generation,
-        taxonomyGeneration,
-        signal,
-      );
-    },
-  });
-
-  const category = directoryQuery.data?.categories.find(
-    (candidate) => candidate.key === categoryKey,
-  );
-  const pageDescriptors = category?.pages ?? [];
-
-  const pagesQuery = useInfiniteQuery({
-    queryKey: [
-      'category-pages',
-      index?.generation,
-      taxonomyGeneration,
-      category?.key,
-    ],
-    enabled: Boolean(index && taxonomyGeneration && pageDescriptors.length > 0),
-    staleTime: Number.POSITIVE_INFINITY,
-    initialPageParam: 0,
-    queryFn: ({ pageParam, signal }) => {
-      const descriptor = pageDescriptors[pageParam];
-      if (!index || !descriptor || !taxonomyGeneration) {
-        throw new Error('Category page is unavailable');
-      }
-      return dataClient.getCategoryPage(
-        descriptor.path,
-        index.generation,
-        taxonomyGeneration,
-        signal,
-      );
-    },
-    getNextPageParam: (_lastPage, loadedPages) =>
-      loadedPages.length < pageDescriptors.length ? loadedPages.length : undefined,
-  });
-
-  // Drain every category page so sorting and search operate over the whole
-  // category, not just the first alphabetical slice. Pages are small, static,
-  // and served from force-cache, so this is a bounded sequential load.
-  useEffect(() => {
-    if (pagesQuery.hasNextPage && !pagesQuery.isFetchingNextPage) {
-      void pagesQuery.fetchNextPage();
-    }
-  }, [
-    pagesQuery.hasNextPage,
-    pagesQuery.isFetchingNextPage,
-    pagesQuery.data,
-    pagesQuery,
-  ]);
-
-  const companies = useMemo(
-    () => pagesQuery.data?.pages.flatMap((page) => page.companies) ?? [],
-    [pagesQuery.data],
-  );
-  const loadingAll = pagesQuery.hasNextPage || pagesQuery.isFetchingNextPage;
+  const categoryQuery = useCategoryV2(categoryKey);
+  const category = categoryQuery.data ?? null;
+  const companies = useMemo(() => category?.companies ?? [], [category]);
 
   const visible = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase();
@@ -168,16 +101,13 @@ export function CategoryPage() {
       <Stack gap="lg">
         {crumbs}
 
-        {indexQuery.isPending || directoryQuery.isPending ? (
+        {categoryQuery.isPending ? (
           <ArticleGridSkeleton count={6} />
-        ) : indexQuery.isError ? (
-          <ErrorState onRetry={() => void indexQuery.refetch()} />
-        ) : directoryQuery.isError ? (
-          <ErrorState onRetry={() => void directoryQuery.refetch()} />
-        ) : !category ? (
+        ) : categoryQuery.isError || !category ? (
           <ErrorState
             title="Category not found"
             message="This category is not part of the current snapshot."
+            onRetry={() => void categoryQuery.refetch()}
           />
         ) : (
           <>
@@ -207,11 +137,7 @@ export function CategoryPage() {
               />
             </Group>
 
-            {pagesQuery.isPending ? (
-              <ArticleGridSkeleton count={6} />
-            ) : pagesQuery.isError ? (
-              <ErrorState onRetry={() => void pagesQuery.refetch()} />
-            ) : visible.length === 0 ? (
+            {visible.length === 0 ? (
               <div className="empty-state">
                 <Text fw={650}>No matching company.</Text>
                 <Text c="dimmed" size="sm">
@@ -224,9 +150,6 @@ export function CategoryPage() {
               <>
                 <Text c="dimmed" size="sm">
                   Showing {formatCount(visible.length)}
-                  {loadingAll
-                    ? ` of ${formatCount(category.company_count)} (loading…)`
-                    : ''}
                 </Text>
                 <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
                   {visible.map((company) => (
